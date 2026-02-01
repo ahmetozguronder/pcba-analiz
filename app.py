@@ -12,14 +12,12 @@ st.markdown("""
     [data-testid="stDataEditor"] th { font-weight: bold !important; }
     [data-testid="stDataEditor"] th:last-child { background-color: #0056b3 !important; color: white !important; }
     
-    /* Metrik Konteynırı */
     .metric-row {
         display: flex;
         justify-content: flex-start;
         gap: 15px;
         margin-bottom: 25px;
     }
-    /* Küçük ve Zarif Kartlar */
     .compact-card {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
@@ -29,17 +27,8 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border-top: 3px solid #0056b3;
     }
-    .card-label {
-        font-size: 13px;
-        color: #666;
-        margin-bottom: 4px;
-        font-weight: 500;
-    }
-    .card-value {
-        font-size: 22px;
-        font-weight: 700;
-        color: #1f1f1f;
-    }
+    .card-label { font-size: 13px; color: #666; margin-bottom: 4px; font-weight: 500; }
+    .card-value { font-size: 22px; font-weight: 700; color: #1f1f1f; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -53,7 +42,6 @@ pkp_file = st.file_uploader("2. PKP Dosyasını Seç (TXT)", type=['txt'])
 
 def explode_designators(df, col_name):
     df_copy = df.copy()
-    # Güvenli string ve upper işlemi
     df_copy[col_name] = df_copy[col_name].astype(str).str.upper().str.split(r'[,;\s]+')
     df_copy = df_copy.explode(col_name).reset_index(drop=True)
     df_copy[col_name] = df_copy[col_name].str.strip()
@@ -77,13 +65,14 @@ if bom_file and pkp_file:
             df_bom_for_analysis = explode_designators(df_bom_raw[[code_col, 'DESIGNATOR']], 'DESIGNATOR')
             merged = pd.merge(df_bom_for_analysis, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
 
-            count_both = len(merged[merged['DURUM'] == 'both'])
-            count_bom_only = len(merged[merged['DURUM'] == 'left_only'])
-            count_pkp_only = len(merged[merged['DURUM'] == 'right_only'])
-
-            # --- 📊 ADIM 1: ANALİZ SONUÇLARI (KÜÇÜK KARTLAR) ---
+            # --- 📊 ADIM 1: ANALİZ SONUÇLARI ---
             st.subheader("📊 1. Adım: Mevcut Eşleşme Analizi")
             
+            count_both = len(merged[merged['DURUM'] == 'both'])
+            bom_only_df = merged[merged['DURUM'] == 'left_only']
+            count_bom_only = len(bom_only_df)
+            count_pkp_only = len(merged[merged['DURUM'] == 'right_only'])
+
             st.markdown(f"""
                 <div class="metric-row">
                     <div class="compact-card" style="border-top-color: #28a745;">
@@ -103,7 +92,7 @@ if bom_file and pkp_file:
 
             t1, t2, t3 = st.tabs(["✅ Eşleşenler", "❌ Sadece BOM", "⚠️ Sadece PKP"])
             with t1: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']].sort_values('DESIGNATOR'), use_container_width=True, hide_index=True)
-            with t2: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']].sort_values('DESIGNATOR'), use_container_width=True, hide_index=True)
+            with t2: st.dataframe(bom_only_df[['DESIGNATOR']].sort_values('DESIGNATOR'), use_container_width=True, hide_index=True)
             with t3: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']].sort_values('DESIGNATOR'), use_container_width=True, hide_index=True)
 
             st.divider()
@@ -113,12 +102,10 @@ if bom_file and pkp_file:
             with col_head:
                 st.subheader("🛠️ 2. Adım: BOM Düzenleme")
             with col_note:
-                st.info("**💡 ÖNEMLİ NOT:** Hızlı teklif için lütfen **Özdisan Stok Kodları** kullanın. Bu, **teklif sürecini** hızlandıracaktır.")
+                st.info("**💡 ÖNEMLİ NOT:** Hızlı teklif için lütfen **Özdisan Stok Kodları** kullanın.")
 
-            # Düzenleme tablosu hazırlığı
             df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].astype(str).apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() not in ["nan", ""] else 0)
             summary_df = df_bom_raw.groupby(code_col).agg({'ADET': 'sum', 'DESIGNATOR': lambda x: ', '.join(x.astype(str).unique())}).reset_index()
-            
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
             summary_df['AYIRICI'] = "➡️" 
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
@@ -146,7 +133,12 @@ if bom_file and pkp_file:
             with col_btn1:
                 if st.button("✅ Listeyi Onayla", type="primary", use_container_width=True):
                     if count_bom_only > 0:
-                        st.error(f"⚠️ ONAYLANAMADI! Eksik referansları ({count_bom_only} adet) kontrol edin.")
+                        # Hangi referansların eksik olduğunu belirle
+                        missing_refs = bom_only_df['DESIGNATOR'].tolist()
+                        ref_text = ", ".join(missing_refs[:10]) # İlk 10 tanesini göster
+                        if len(missing_refs) > 10: ref_text += " ..."
+                        
+                        st.error(f"⚠️ ONAYLANAMADI! PKP dosyasında şu referanslar eksik: **{ref_text}**")
                     else:
                         st.session_state.confirmed = True
                         st.rerun()
@@ -156,7 +148,6 @@ if bom_file and pkp_file:
                     output = io.BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         edited_df.drop(columns=['AYIRICI']).to_excel(writer, index=False)
-                    
                     st.download_button("📥 Onaylı Listeyi İndir", output.getvalue(), "ozdisan_onayli_bom.xlsx", use_container_width=True)
             
             with col_msg:
