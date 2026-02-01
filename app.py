@@ -6,6 +6,20 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
+# --- CSS İLE TABLO HÜCRELERİNİ BEYAZLATMA ---
+# Bu kısım düzenleme alanındaki koyu lacivert/siyah arka planı açık renge çevirir
+st.markdown("""
+    <style>
+    [data-testid="stDataEditor"] div {
+        background-color: #ffffff !important;
+    }
+    [data-testid="stDataEditor"] th {
+        background-color: #f0f2f6 !important;
+        color: #31333F !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- 1. MAVİ ÖZDİSAN BAŞLIĞI VE SAĞ ÜST NOT ---
 col_title, col_note = st.columns([2.5, 1])
 
@@ -47,7 +61,6 @@ if bom_file and pkp_file:
             df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
             # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ (GÜNCEL GRUPLAMA) ---
-            # Gruplama yaparken sütunları netleştiriyoruz
             summary_df = df_bom_raw.groupby(code_col).agg({
                 'ADET_SAYISI': 'sum',
                 'DESIGNATOR': lambda x: ', '.join(x.unique())
@@ -66,16 +79,21 @@ if bom_file and pkp_file:
             <div style="background-color: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1; margin-bottom: 10px;">
                 <h4 style="color: #31708f; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
                 <p style="color: #31708f; font-size: 14px;">
-                    En soldaki <b>'✍️ DÜZENLEME'</b> sütununa çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapmazsanız orijinal kodlar geçerli sayılır.
+                    Aşağıdaki <b>'✍️ DÜZENLEME ALANI'</b> sütunundaki her bir hücrenin yanındaki simgeye tıklayarak düzenleme yapabilirsiniz.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
+            # --- DÜZENLEME SEMBOLÜNÜN HER HÜCREYE EKLENDİĞİ KISIM ---
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
                 column_config={
-                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large"),
+                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn(
+                        "✍️ DÜZENLEME ALANI", 
+                        width="large",
+                        prefix="✍️ "  # <-- Bu satır her hücrenin başına sembolü koyar
+                    ),
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True)
