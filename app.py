@@ -6,19 +6,19 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS: EN SAĞDAKİ BAŞLIK RENGİNİ ÖZDİSAN MAVİSİ YAP ---
+# --- CSS: ÖZEL BAŞLIK VE GÖRSEL AYRIM ---
 st.markdown("""
     <style>
     /* Tablo genel başlık stili */
     [data-testid="stDataEditor"] th {
         font-weight: bold !important;
     }
-    /* SADECE EN SAĞDAKİ SÜTUN BAŞLIĞI (DÜZENLEME ALANI) */
+    /* EN SAĞDAKİ DÜZENLEME SÜTUNU: Özdisan Mavisi */
     [data-testid="stDataEditor"] th:last-child {
         background-color: #0056b3 !important;
         color: white !important;
     }
-    /* Tablolar arası mesafe için özel class */
+    /* Tablolar arası dikey mesafe */
     .table-spacer {
         margin-top: 50px;
         margin-bottom: 20px;
@@ -66,9 +66,14 @@ if bom_file and pkp_file:
             }).reset_index()
             
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
+            
+            # --- AYIRICI SÜTUN EKLEME ---
+            # Görsel boşluk yaratmak için boş bir sütun ekliyoruz
+            summary_df[' '] = "" 
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
-            # Sütunları düzenle: Düzenleme alanı en sağda
-            summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', 'DÜZENLEME ALANI']]
+            
+            # Sütun Sıralaması: Boşluk sütunu ( ) Referanslar ve Düzenleme arasında
+            summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', ' ', 'DÜZENLEME ALANI']]
 
             # --- 3. DÜZENLENEBİLİR TABLO ---
             st.subheader("🛠️ BOM Düzenleme Paneli")
@@ -79,13 +84,12 @@ if bom_file and pkp_file:
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True),
+                    " ": st.column_config.TextColumn(" ", disabled=True, width="small"), # Boşluk sütunu
                     "DÜZENLEME ALANI": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large")
                 },
                 hide_index=True
             )
 
-            # --- TABLOLAR ARASI BOŞLUK ---
-            # Görsel bir ayrım için boşluk ve çizgi ekliyoruz
             st.markdown('<div class="table-spacer"></div>', unsafe_allow_html=True)
             st.divider() 
             
@@ -115,23 +119,22 @@ if bom_file and pkp_file:
             df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
             merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
 
-            # Metrikler
             c1, c2, c3 = st.columns(3)
             c1.metric("BOM Parça", len(df_bom_exploded))
             c2.metric("PKP Parça", len(df_pkp))
             c3.metric("Tam Eşleşen ✅", len(merged[merged['DURUM'] == 'both']))
 
-            # Sonuç Tabloları
             t1, t2, t3 = st.tabs(["✅ Tam Eşleşenler", "❌ Sadece BOM", "⚠️ Sadece PKP"])
             with t1: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
             with t2: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
             with t3: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
 
-            # İndirme Alanı
             st.write("")
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                edited_df.to_excel(writer, index=False)
+                # Excel'e aktarırken boşluk sütununu temizliyoruz
+                final_export = edited_df.drop(columns=[' '])
+                final_export.to_excel(writer, index=False)
             st.download_button("📥 Onaylı Özdisan Listesini İndir (.xlsx)", output.getvalue(), "ozdisan_onayli_bom.xlsx", use_container_width=True)
 
         else:
