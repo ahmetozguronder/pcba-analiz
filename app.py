@@ -69,7 +69,7 @@ if bom_file and pkp_file:
             
             # --- AYIRICI SÜTUN: MAVİ OK EKLEME ---
             # İçerisinde mavi ok olan bir ayırıcı oluşturuyoruz
-            summary_df['AYIRICI'] = "🔵 ➡️" 
+            summary_df['AYIRICI'] = "➡️" 
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
             
             summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', 'AYIRICI', 'DÜZENLEME ALANI']]
@@ -140,3 +140,4 @@ if bom_file and pkp_file:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
     except Exception as e:
         st.error(f"Sistem Hatası: {e}")
+
