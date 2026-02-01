@@ -3,34 +3,40 @@ import pandas as pd
 import io
 import re
 
-st.set_page_config(page_title="PCBA Akıllı Analiz", layout="wide")
+st.set_page_config(page_title="PCBA Profesyonel Analiz", layout="wide")
 st.title("🔍 PCBA BOM & PKP Karşılaştırıcı")
 
 bom_file = st.file_uploader("1. BOM Dosyasını Seç (Excel)", type=['xlsx'])
 pkp_file = st.file_uploader("2. PKP Dosyasını Seç (TXT)", type=['txt'])
 
 def explode_designators(df, col_name):
-    """Hücre içindeki 'D1, D2, D3' gibi virgüllü yapıları ayırıp alt alta satır yapar."""
-    # Sütundaki değerleri stringe çevir, virgüllere göre böl ve listeye at
+    """Hücre içindeki 'D1, D2' gibi yapıları ayırır ve her birini bir satır yapar."""
+    # Orijinal sütunu koruyarak kopyala
+    df = df.copy()
     df[col_name] = df[col_name].astype(str).str.split(r'[,;\s]+')
-    # Listeyi patlat (explode) ederek her elemanı yeni bir satır yap
     df = df.explode(col_name).reset_index(drop=True)
-    # Boşlukları temizle
     df[col_name] = df[col_name].str.strip()
-    # Boş kalan satırları temizle
     df = df[df[col_name] != ""]
     return df
 
 if bom_file and pkp_file:
     try:
-        # --- 1. BOM OKUMA VE AYRIŞTIRMA ---
+        # --- 1. BOM OKUMA ---
         df_bom_raw = pd.read_excel(bom_file)
         df_bom_raw.columns = [str(c).strip().upper() for c in df_bom_raw.columns]
         
+        # Ürün kodu sütununu bulmaya çalış (PART NUMBER, COMMENT veya ITEM CODE olabilir)
+        potential_code_cols = ['PART NUMBER', 'COMMENT', 'DESCRIPTION', 'ÜRÜN KODU', 'MALZEME KODU']
+        code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[1] if len(df_bom_raw.columns) > 1 else df_bom_raw.columns[0])
+
         if 'DESIGNATOR' in df_bom_raw.columns:
-            # Virgülle birleşik olanları (D1, D2...) ayırıyoruz
-            df_bom = explode_designators(df_bom_raw[['DESIGNATOR']], 'DESIGNATOR')
-            df_bom['DESIGNATOR'] = df_bom['DESIGNATOR'].str.upper()
+            # Önce adet hesabı için ham veriyi sakla
+            # Virgülleri ayırmadan önce her satırda kaç komponent olduğunu say
+            df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].astype(str).apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
+            
+            # Şimdi referansları eşleşme için patlat (explode)
+            df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
+            df_bom_exploded['DESIGNATOR'] = df_bom_exploded['DESIGNATOR'].str.upper()
         else:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
             st.stop()
@@ -54,24 +60,33 @@ if bom_file and pkp_file:
         
         df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
 
-        # --- 3. KIYASLAMA ---
-        merged = pd.merge(
-            df_bom, 
-            df_pkp, 
-            on='DESIGNATOR', 
-            how='outer', 
-            indicator='DURUM',
-            suffixes=('_BOM', '_PKP')
-        )
+        # --- 3. KIYASLAMA VE ÖZET TABLO ---
+        merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
+
+        # Ürün Kodu Bazlı Özet (Pivot Tablo)
+        # Sadece BOM'da olan parçalar üzerinden adet toplamı alıyoruz
+        summary_df = df_bom_raw[[code_col, 'ADET']].groupby(code_col).sum().reset_index()
+        summary_df.columns = ['ÜRÜN KODU / AÇIKLAMA', 'TOPLAM ADET']
 
         # --- 4. GÖRSEL PANEL ---
         st.divider()
-        c1, c2, c3 = st.columns(3)
-        c1.metric("BOM (Ayrıştırılmış)", len(df_bom))
-        c2.metric("PKP (Altium)", len(df_pkp))
-        c3.metric("Tam Eşleşen ✅", len(merged[merged['DURUM'] == 'both']))
+        m1, m2, m3 = st.columns(3)
+        m1.metric("BOM Toplam Komponent", summary_df['TOPLAM ADET'].sum())
+        m2.metric("PKP (Dizilecek) Komponent", len(df_pkp))
+        m3.metric("Fark", summary_df['TOPLAM ADET'].sum() - len(df_pkp))
 
-        t1, t2, t3 = st.tabs(["✅ Tam Eşleşenler", "❌ Sadece BOM'da Var", "⚠️ Sadece PKP'de Var"])
+        # Sekmeler
+        t0, t1, t2, t3 = st.tabs(["📊 Ürün Özet Listesi", "✅ Tam Eşleşenler", "❌ Sadece BOM'da Var", "⚠️ Sadece PKP'de Var"])
+
+        with t0:
+            st.subheader("BOM Malzeme ve Adet Listesi")
+            st.dataframe(summary_df, use_container_width=True)
+            
+            # Excel İndirme Butonu
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                summary_df.to_excel(writer, index=False)
+            st.download_button("Özet Listeyi İndir (.xlsx)", output.getvalue(), "bom_ozet.xlsx")
 
         with t1:
             st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
