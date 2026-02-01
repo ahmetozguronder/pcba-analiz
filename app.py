@@ -24,14 +24,6 @@ with col_left:
 with col_right:
     pkp_file = st.file_uploader("2. PKP / Koordinat Dosyasını Seç (TXT)", type=['txt'])
 
-def check_code_quality(code):
-    """Kodun kalitesini kontrol eder ve müşteri için not üretir."""
-    code_str = str(code).strip()
-    # Eğer hücre boşsa veya 5 karakterden kısaysa (anlamsız açıklama varsayımı)
-    if not code_str or len(code_str) < 5 or code_str.lower() in ['direnç', 'resistor', 'cap', 'kondansatör']:
-        return "⚠️ Lütfen Özdisan Kodu veya Ürün Linki Ekleyiniz"
-    return "✅ Kod Mevcut"
-
 def explode_designators(df, col_name):
     df = df.copy()
     df[col_name] = df[col_name].astype(str).str.split(r'[,;\s]+')
@@ -50,13 +42,56 @@ if bom_file and pkp_file:
         code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[0])
 
         if 'DESIGNATOR' in df_bom_raw.columns:
-            # --- Müşteriye Not Sütunu Oluşturma ---
-            df_bom_raw['DURUM NOTU'] = df_bom_raw[code_col].apply(check_code_quality)
-            
+            # --- ANALİZ HAZIRLIĞI ---
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
-            df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
+            df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # --- 2. PKP OKUMA ---
+            # Özet Tablo Oluşturma
+            summary_df = df_bom_raw.groupby(code_col).agg({
+                'ADET': 'sum',
+                'DESIGNATOR': lambda x: ', '.join(x)
+            }).reset_index()
+            
+            # Müşteri Aksiyon Sütunu (Default olarak mevcut kod yazılıyor)
+            summary_df['MÜŞTERİ ONAYI / GÜNCEL KOD'] = summary_df[code_col]
+            summary_df.columns = ['BOM KODU', 'ADET', 'REFERANSLAR', 'MÜŞTERİ ONAYI / GÜNCEL KOD']
+
+            # --- DİNAMİK EDİTÖR ---
+            st.subheader("🔵 Özdisan Malzeme Onay Paneli")
+            st.markdown("""
+            *Aşağıdaki tabloda **'MÜŞTERİ ONAYI / GÜNCEL KOD'** sütununa tıklayarak eksik kodları tamamlayabilir veya link ekleyebilirsiniz.*
+            """)
+
+            # Tabloyu düzenlenebilir yapıyoruz
+            edited_df = st.data_editor(
+                summary_df,
+                use_container_width=True,
+                column_config={
+                    "MÜŞTERİ ONAYI / GÜNCEL KOD": st.column_config.TextColumn(
+                        "Güncel Kod / Link Girişi",
+                        help="Eksikse Özdisan kodunu veya ürün linkini buraya yazın.",
+                        width="large"
+                    ),
+                    "ADET": st.column_config.NumberColumn(disabled=True),
+                    "BOM KODU": st.column_config.TextColumn(disabled=True),
+                    "REFERANSLAR": st.column_config.TextColumn(disabled=True)
+                },
+                hide_index=True
+            )
+
+            if st.button("✅ Listeyi Onayla ve Analizi Tamamla", type="primary"):
+                st.balloons()
+                st.success("BOM Listesi başarıyla güncellendi ve onaylandı!")
+                
+                # Onaylanmış listeyi indirme butonu
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    edited_df.to_excel(writer, index=False)
+                st.download_button("📥 Onaylı Listeyi İndir (.xlsx)", output.getvalue(), "onayli_ozdisan_listesi.xlsx")
+
+            # --- EŞLEŞME ANALİZİ (Görsel Sekmeler) ---
+            st.divider()
+            df_pkp = pd.DataFrame()
             raw_bytes = pkp_file.getvalue()
             try: content = raw_bytes.decode("utf-8")
             except: content = raw_bytes.decode("iso-8859-9")
@@ -72,46 +107,16 @@ if bom_file and pkp_file:
                         ref = parts[0].strip().upper()
                         if len(ref) > 1 and "=" not in ref and "-" not in ref:
                             pkp_list.append(ref)
-            
             df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
-
-            # --- 3. ÖZET TABLO ---
-            df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # Özet tabloda 'DURUM NOTU'nu da dahil ediyoruz
-            summary_df = df_bom_raw.groupby([code_col, 'DURUM NOTU']).agg({
-                'ADET': 'sum',
-                'DESIGNATOR': lambda x: ', '.join(x)
-            }).reset_index()
-            summary_df.columns = ['MALZEME KODU / AÇIKLAMA', 'MÜŞTERİ AKSİYONU', 'TOPLAM ADET', 'REFERANSLAR']
-
+            df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
             merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
 
-            # --- 4. GÖRSEL PANEL ---
-            m1, m2, m3 = st.columns(3)
-            with m1: st.metric("BOM Toplam Parça", int(summary_df['TOPLAM ADET'].sum()))
-            with m2: st.metric("PKP Dizilecek", len(df_pkp))
-            with m3: st.metric("Fark", int(summary_df['TOPLAM ADET'].sum() - len(df_pkp)))
+            tabs = st.tabs(["✅ Eşleşenler", "❌ Sadece BOM'da Var", "⚠️ Sadece PKP'de Var"])
+            with tabs[0]: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
+            with tabs[1]: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
+            with tabs[2]: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
 
-            tabs = st.tabs(["🔵 Özdisan Malzeme Listesi", "✅ Eşleşenler", "❌ BOM'da Var", "⚠️ PKP'de Var"])
-
-            with tabs[0]:
-                st.warning("⚠️ 'MÜŞTERİ AKSİYONU' sütununda uyarı olan satırlar için lütfen Özdisan Stok Kodu veya ürün linki sağlayınız.")
-                # Renklendirme fonksiyonu (Opsiyonel: Tabloyu daha okunaklı kılar)
-                def highlight_action(val):
-                    color = 'orange' if '⚠️' in str(val) else 'white'
-                    return f'background-color: {color}'
-                
-                st.dataframe(summary_df, use_container_width=True)
-                
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    summary_df.to_excel(writer, index=False)
-                st.download_button("📥 Analizli Listeyi İndir (.xlsx)", output.getvalue(), "ozdisan_analiz_raporu.xlsx")
-
-            with tabs[1]: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
-            with tabs[2]: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
-            with tabs[3]: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
         else:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
 
