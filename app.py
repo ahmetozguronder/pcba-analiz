@@ -46,36 +46,39 @@ if bom_file and pkp_file:
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
             df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ (GÜNCEL GRUPLAMA) ---
-            # Gruplama yaparken sütunları netleştiriyoruz
+            # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ ---
             summary_df = df_bom_raw.groupby(code_col).agg({
                 'ADET_SAYISI': 'sum',
                 'DESIGNATOR': lambda x: ', '.join(x.unique())
             }).reset_index()
             
-            # Sütun isimlerini HATA ALMAYACAK şekilde manuel set ediyoruz
+            # Sütun isimlerini sabitleme
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
             
-            # Müşterinin düzenleyeceği sütun (Varsayılan olarak BOM kodu ile gelir)
+            # Müşterinin düzenleyeceği sütun
             summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df['BOM_KODU']
-            
-            # Sütunları istenen sıraya diz
             summary_df = summary_df[['✍️ GÜNCELLEME (KOD VEYA LİNK)', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
 
+            # Arka planı daha açık (Light Grey/Blue) panel
             st.markdown("""
-            <div style="background-color: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1; margin-bottom: 10px;">
-                <h4 style="color: #31708f; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
-                <p style="color: #31708f; font-size: 14px;">
-                    En soldaki <b>'✍️ DÜZENLEME'</b> sütununa çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapmazsanız orijinal kodlar geçerli sayılır.
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; margin-bottom: 10px;">
+                <h4 style="color: #495057; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
+                <p style="color: #6c757d; font-size: 14px;">
+                    Aşağıdaki <b>açık renkli</b> alana çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapılmayan satırlar orijinal haliyle kalacaktır.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
+            # Tablo Düzenleyici
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
                 column_config={
-                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large"),
+                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn(
+                        "✍️ DÜZENLEME ALANI", 
+                        width="large",
+                        help="Özdisan stok kodunu veya linkini buraya yazın."
+                    ),
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True)
