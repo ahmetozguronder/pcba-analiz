@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-
+st.cache_data.clear()
 st.set_page_config(page_title="PCBA Karşılaştırıcı", layout="wide")
 
 st.title("🔌 PCBA BOM & PKP Analiz Aracı")
@@ -52,4 +52,5 @@ if bom_file and pkp_file and stok_file:
         st.download_button("Sonuçları CSV Olarak İndir", csv, "analiz_sonucu.csv", "text/csv")
 
     except Exception as e:
+
         st.error(f"Bir hata oluştu: {e}. Lütfen sütun başlıklarını kontrol edin.")
