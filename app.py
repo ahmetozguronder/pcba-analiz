@@ -6,22 +6,17 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS: DÜZENLEME SÜTUNUNU VURGULAMA ---
-# Bu stil, kullanıcıya hangi sütunun düzenlenebilir olduğunu görsel olarak hissettirir.
+# --- CSS: TABLO GÖRÜNÜMÜNÜ BEYAZLATMA ---
 st.markdown("""
     <style>
-    /* Tablo genel arka planı beyaz */
     [data-testid="stDataEditor"] div {
         background-color: #ffffff !important;
     }
-    /* Başlıkları belirgin yap */
     [data-testid="stDataEditor"] th {
         background-color: #f0f2f6 !important;
-        color: #1f2937 !important;
+        color: #31333F !important;
         font-weight: bold !important;
     }
-    /* İlk sütunu (Düzenleme Alanı) hafif bir renk tonuyla ayır */
-    /* Not: Streamlit sürümlerine göre bu CSS seçicisi değişiklik gösterebilir */
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,31 +65,18 @@ if bom_file and pkp_file:
             
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
             
-            # Düzenleme sütunu
+            # Düzenleme sütunu (Sembolsüz, temiz veri)
             summary_df['GÜNCELLEME'] = summary_df['BOM_KODU']
-            
-            # Sütunları sırala
             summary_df = summary_df[['GÜNCELLEME', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
 
-            st.markdown("""
-            <div style="background-color: #f0f7ff; padding: 12px; border-radius: 8px; border-left: 5px solid #0056b3; margin-bottom: 10px;">
-                <h4 style="color: #0056b3; margin-top: 0; margin-bottom: 5px;">✍️ Giriş Alanı Vurgulandı</h4>
-                <p style="color: #555; font-size: 14px; margin-bottom: 0;">
-                    En soldaki <b>'GÜNCELLEME'</b> sütunu düzenlemeye açıktır. Diğer sütunlar referans amaçlı kilitlenmiştir.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # TABLO EDİTÖRÜ
-            # Prefix hatası almamak ve veriyi bozmamak için Column Config'i en sade haliyle kullanıyoruz.
+            # TABLO EDİTÖRÜ (Bilgilendirme kutusu kaldırıldı)
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
                 column_config={
                     "GÜNCELLEME": st.column_config.TextColumn(
-                        "✍️ DÜZENLEME (STOK KODU GİRİN)", 
-                        width="large",
-                        help="Değiştirmek istediğiniz hücreye çift tıklayın."
+                        "✍️ DÜZENLEME ALANI", 
+                        width="large"
                     ),
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
@@ -126,7 +108,6 @@ if bom_file and pkp_file:
             
             df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
             df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
-            
             merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
 
             # --- 5. SONUÇLAR ---
