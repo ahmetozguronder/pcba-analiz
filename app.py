@@ -82,7 +82,7 @@ if bom_file and pkp_file:
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True),
-                    "AYIRICI": st.column_config.TextColumn("", disabled=True, width="small"), # Küçük ve sabit
+                    "AYIRICI": st.column_config.TextColumn("", disabled=True, width=20), # GENİŞLİK 20 PİKSELE DÜŞÜRÜLDÜ
                     "DÜZENLEME ALANI": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large")
                 },
                 hide_index=True
@@ -130,6 +130,7 @@ if bom_file and pkp_file:
             st.write("")
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                # Excel'e aktarırken ok sütununu siliyoruz
                 final_export = edited_df.drop(columns=['AYIRICI'])
                 final_export.to_excel(writer, index=False)
             st.download_button("📥 Onaylı Özdisan Listesini İndir (.xlsx)", output.getvalue(), "ozdisan_onayli_bom.xlsx", use_container_width=True)
