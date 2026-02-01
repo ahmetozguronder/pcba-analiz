@@ -88,24 +88,43 @@ if bom_file and pkp_file:
                 hide_index=True
             )
 
-            # --- SADE ONAY BUTONU ---
             col_btn1, col_btn2 = st.columns([1, 4])
             with col_btn1:
-                # Buton tıklandığında sadece onay durumunu değiştirir
                 if st.button("✅ Listeyi Onayla", type="primary", use_container_width=True):
                     st.session_state.confirmed = True
-                    st.rerun() # Sayfayı yenileyerek kilitlenmiş tabloyu ve analiz sonuçlarını gösterir
+                    st.rerun()
             
             with col_btn2:
                 if st.session_state.confirmed:
-                    st.markdown("<p style='color: #28a745; font-weight: bold; margin-top: 10px;'>✔️ Liste Onaylandı ve Analiz Edildi.</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='color: #28a745; font-weight: bold; margin-top: 10px;'>✔️ Liste Onaylandı.</p>", unsafe_allow_html=True)
 
-            # --- 4. ANALİZ VE SONUÇLAR (SADECE ONAYLANDIYSA GÖSTER) ---
+            # --- 4. ANALİZ VE İNDİRME (SADECE ONAYLANDIYSA) ---
             if st.session_state.confirmed:
                 st.markdown('<div class="table-spacer"></div>', unsafe_allow_html=True)
                 st.divider()
-                st.subheader("📊 2. Adım: Analiz Sonuçları ve Kıyaslama")
+                
+                # İndirme Butonunu Öne Çıkaralım
+                st.subheader("📥 2. Adım: Onaylı Listeyi İndir")
+                
+                # Excel Dosyasını Hazırla (Ok sütununu atarak)
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    final_export = edited_df.drop(columns=['AYIRICI'])
+                    final_export.to_excel(writer, index=False)
+                
+                st.download_button(
+                    label="💾 Onaylı BOM Dosyasını İndir (.xlsx)",
+                    data=output.getvalue(),
+                    file_name="ozdisan_onayli_bom_listesi.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    help="Bu dosyayı Özdisan teklif sürecinde kullanabilirsiniz."
+                )
 
+                st.divider()
+                st.subheader("📊 3. Adım: Analiz ve Kıyaslama Detayları")
+
+                # Analiz Hesaplamaları
                 raw_bytes = pkp_file.getvalue()
                 try: content = raw_bytes.decode("utf-8")
                 except: content = raw_bytes.decode("iso-8859-9")
@@ -135,20 +154,6 @@ if bom_file and pkp_file:
                 with t1: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
                 with t2: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
                 with t3: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
-
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    final_export = edited_df.drop(columns=['AYIRICI'])
-                    final_export.to_excel(writer, index=False)
-                
-                st.write("")
-                st.download_button(
-                    label="📥 Onaylı Özdisan Listesini İndir (.xlsx)",
-                    data=output.getvalue(),
-                    file_name="ozdisan_onayli_bom.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
 
         else:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
