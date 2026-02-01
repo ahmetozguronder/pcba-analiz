@@ -71,14 +71,13 @@ if bom_file and pkp_file:
             # --- 3. DÜZENLENEBİLİR TABLO ---
             st.subheader("🛠️ 1. Adım: BOM Listesini Gözden Geçirin")
             
-            # Session State ile Onay Durumunu Takip Etme
             if 'confirmed' not in st.session_state:
                 st.session_state.confirmed = False
 
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
-                disabled=st.session_state.confirmed, # Onaylandıysa düzenlemeyi kapat
+                disabled=st.session_state.confirmed, 
                 column_config={
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
@@ -89,15 +88,17 @@ if bom_file and pkp_file:
                 hide_index=True
             )
 
-            # --- ONAY BUTONU ---
+            # --- SADE ONAY BUTONU ---
             col_btn1, col_btn2 = st.columns([1, 4])
             with col_btn1:
+                # Buton tıklandığında sadece onay durumunu değiştirir
                 if st.button("✅ Listeyi Onayla", type="primary", use_container_width=True):
                     st.session_state.confirmed = True
-                    st.balloons()
+                    st.rerun() # Sayfayı yenileyerek kilitlenmiş tabloyu ve analiz sonuçlarını gösterir
+            
             with col_btn2:
                 if st.session_state.confirmed:
-                    st.success("BOM Listesi Onaylandı! Analiz sonuçları aşağıda hazırlanmıştır.")
+                    st.markdown("<p style='color: #28a745; font-weight: bold; margin-top: 10px;'>✔️ Liste Onaylandı ve Analiz Edildi.</p>", unsafe_allow_html=True)
 
             # --- 4. ANALİZ VE SONUÇLAR (SADECE ONAYLANDIYSA GÖSTER) ---
             if st.session_state.confirmed:
@@ -135,7 +136,6 @@ if bom_file and pkp_file:
                 with t2: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
                 with t3: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
 
-                # İndirme Butonu
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     final_export = edited_df.drop(columns=['AYIRICI'])
