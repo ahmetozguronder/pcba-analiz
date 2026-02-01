@@ -6,35 +6,39 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS: GÖRSEL DÜZENLEME (Görseldeki gibi temiz kartlar için) ---
+# --- CSS: ŞIK VE KÜÇÜK METRİK KARTLARI ---
 st.markdown("""
     <style>
     [data-testid="stDataEditor"] th { font-weight: bold !important; }
     [data-testid="stDataEditor"] th:last-child { background-color: #0056b3 !important; color: white !important; }
-    .metric-container {
+    
+    /* Metrik Konteynırı */
+    .metric-row {
         display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 20px;
+        justify-content: flex-start;
+        gap: 15px;
+        margin-bottom: 25px;
     }
-    .metric-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        text-align: center;
-        flex: 1;
-        border-bottom: 4px solid #0056b3;
+    /* Küçük ve Zarif Kartlar */
+    .compact-card {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 10px 20px;
+        min-width: 180px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border-top: 3px solid #0056b3;
     }
-    .metric-value {
-        font-size: 28px;
-        font-weight: bold;
-        color: #1f1f1f;
-        margin-top: 5px;
-    }
-    .metric-label {
-        font-size: 14px;
+    .card-label {
+        font-size: 13px;
         color: #666;
+        margin-bottom: 4px;
+        font-weight: 500;
+    }
+    .card-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1f1f1f;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -49,6 +53,7 @@ pkp_file = st.file_uploader("2. PKP Dosyasını Seç (TXT)", type=['txt'])
 
 def explode_designators(df, col_name):
     df_copy = df.copy()
+    # Güvenli string ve upper işlemi
     df_copy[col_name] = df_copy[col_name].astype(str).str.upper().str.split(r'[,;\s]+')
     df_copy = df_copy.explode(col_name).reset_index(drop=True)
     df_copy[col_name] = df_copy[col_name].str.strip()
@@ -72,27 +77,26 @@ if bom_file and pkp_file:
             df_bom_for_analysis = explode_designators(df_bom_raw[[code_col, 'DESIGNATOR']], 'DESIGNATOR')
             merged = pd.merge(df_bom_for_analysis, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
 
-            # --- 📊 ADIM 1: ANALİZ SONUÇLARI (GÖRSELDEKİ GİBİ) ---
-            st.subheader("📊 1. Adım: Mevcut Eşleşme Analizi")
-            
             count_both = len(merged[merged['DURUM'] == 'both'])
             count_bom_only = len(merged[merged['DURUM'] == 'left_only'])
             count_pkp_only = len(merged[merged['DURUM'] == 'right_only'])
 
-            # Özel Metrik Kutuları
+            # --- 📊 ADIM 1: ANALİZ SONUÇLARI (KÜÇÜK KARTLAR) ---
+            st.subheader("📊 1. Adım: Mevcut Eşleşme Analizi")
+            
             st.markdown(f"""
-                <div class="metric-container">
-                    <div class="metric-card">
-                        <div class="metric-label">✅ Tam Eşleşen</div>
-                        <div class="metric-value">{count_both}</div>
+                <div class="metric-row">
+                    <div class="compact-card" style="border-top-color: #28a745;">
+                        <div class="card-label">✅ Tam Eşleşen</div>
+                        <div class="card-value">{count_both}</div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-label">❌ Sadece BOM (Eksik)</div>
-                        <div class="metric-value" style="color: #d32f2f;">{count_bom_only}</div>
+                    <div class="compact-card" style="border-top-color: #dc3545;">
+                        <div class="card-label">❌ Sadece BOM (Eksik)</div>
+                        <div class="card-value">{count_bom_only}</div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-label">⚠️ Sadece PKP (Fazla)</div>
-                        <div class="metric-value" style="color: #f57c00;">{count_pkp_only}</div>
+                    <div class="compact-card" style="border-top-color: #ffc107;">
+                        <div class="card-label">⚠️ Sadece PKP (Fazla)</div>
+                        <div class="card-value">{count_pkp_only}</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -109,9 +113,10 @@ if bom_file and pkp_file:
             with col_head:
                 st.subheader("🛠️ 2. Adım: BOM Düzenleme")
             with col_note:
-                st.info("**💡 ÖNEMLİ NOT:** Hızlı teklif ve doğru eşleşme için lütfen **Özdisan Stok Kodları** ile çalışınız. Bu, **teklif sürecini** hızlandıracaktır.")
+                st.info("**💡 ÖNEMLİ NOT:** Hızlı teklif için lütfen **Özdisan Stok Kodları** kullanın. Bu, **teklif sürecini** hızlandıracaktır.")
 
-            df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].astype(str).apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() != "nan" else 0)
+            # Düzenleme tablosu hazırlığı
+            df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].astype(str).apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() not in ["nan", ""] else 0)
             summary_df = df_bom_raw.groupby(code_col).agg({'ADET': 'sum', 'DESIGNATOR': lambda x: ', '.join(x.astype(str).unique())}).reset_index()
             
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
@@ -127,10 +132,10 @@ if bom_file and pkp_file:
                 disabled=st.session_state.confirmed, 
                 column_config={
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
-                    "TOPLAM_ADET": st.column_config.NumberColumn("ADET", disabled=True),
+                    "TOPLAM_ADET": st.column_config.NumberColumn("ADET", disabled=True, width="small"),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True),
                     "AYIRICI": st.column_config.TextColumn("", disabled=True, width=20),
-                    "DÜZENLEME ALANI": st.column_config.TextColumn("✍️ DÜZENLEME ALANI (Özdisan Kodu)", width="large")
+                    "DÜZENLEME ALANI": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large")
                 },
                 hide_index=True
             )
@@ -141,7 +146,7 @@ if bom_file and pkp_file:
             with col_btn1:
                 if st.button("✅ Listeyi Onayla", type="primary", use_container_width=True):
                     if count_bom_only > 0:
-                        st.error(f"⚠️ ONAYLANAMADI! BOM listesindeki {count_bom_only} referans PKP'de yok. Lütfen düzeltin.")
+                        st.error(f"⚠️ ONAYLANAMADI! Eksik referansları ({count_bom_only} adet) kontrol edin.")
                     else:
                         st.session_state.confirmed = True
                         st.rerun()
@@ -156,10 +161,9 @@ if bom_file and pkp_file:
             
             with col_msg:
                 if st.session_state.confirmed:
-                    st.success("✔️ Onaylandı.")
+                    st.success("✔️ Liste onaylandı.")
 
-        else:
-            st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
+        else: st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
             
     except Exception as e:
         st.error(f"Sistem Hatası: {e}")
