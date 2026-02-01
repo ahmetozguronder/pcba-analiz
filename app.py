@@ -6,8 +6,8 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS İLE TABLO HÜCRELERİNİ BEYAZLATMA ---
-# Bu kısım düzenleme alanındaki koyu lacivert/siyah arka planı açık renge çevirir
+# --- 1. GÖRSEL DÜZENLEME (CSS) ---
+# Tabloyu beyazlatır ve başlıkları belirginleştirir
 st.markdown("""
     <style>
     [data-testid="stDataEditor"] div {
@@ -16,11 +16,12 @@ st.markdown("""
     [data-testid="stDataEditor"] th {
         background-color: #f0f2f6 !important;
         color: #31333F !important;
+        font-weight: bold !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. MAVİ ÖZDİSAN BAŞLIĞI VE SAĞ ÜST NOT ---
+# --- 2. MAVİ ÖZDİSAN BAŞLIĞI VE SAĞ ÜST NOT ---
 col_title, col_note = st.columns([2.5, 1])
 
 with col_title:
@@ -47,7 +48,7 @@ def explode_designators(df, col_name):
 
 if bom_file and pkp_file:
     try:
-        # --- 2. BOM OKUMA VE HAZIRLIK ---
+        # --- 3. BOM OKUMA VE HAZIRLIK ---
         df_bom_raw = pd.read_excel(bom_file)
         df_bom_raw.columns = [str(c).strip().upper() for c in df_bom_raw.columns]
         
@@ -60,17 +61,18 @@ if bom_file and pkp_file:
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
             df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ (GÜNCEL GRUPLAMA) ---
+            # --- 4. DÜZENLENEBİLİR MÜŞTERİ PANELİ (GÜNCEL GRUPLAMA) ---
             summary_df = df_bom_raw.groupby(code_col).agg({
                 'ADET_SAYISI': 'sum',
                 'DESIGNATOR': lambda x: ', '.join(x.unique())
             }).reset_index()
             
-            # Sütun isimlerini HATA ALMAYACAK şekilde manuel set ediyoruz
+            # Sütun isimlerini manuel set ediyoruz
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
             
-            # Müşterinin düzenleyeceği sütun (Varsayılan olarak BOM kodu ile gelir)
-            summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df['BOM_KODU']
+            # HÜCRE SEVİYESİNDE SEMBOL EKLEME (✍️)
+            # Prefix hatası almamak için metnin başına doğrudan ekliyoruz
+            summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df['BOM_KODU'].apply(lambda x: f"✍️ {x}")
             
             # Sütunları istenen sıraya diz
             summary_df = summary_df[['✍️ GÜNCELLEME (KOD VEYA LİNK)', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
@@ -79,21 +81,16 @@ if bom_file and pkp_file:
             <div style="background-color: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1; margin-bottom: 10px;">
                 <h4 style="color: #31708f; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
                 <p style="color: #31708f; font-size: 14px;">
-                    Aşağıdaki <b>'✍️ DÜZENLEME ALANI'</b> sütunundaki her bir hücrenin yanındaki simgeye tıklayarak düzenleme yapabilirsiniz.
+                    En soldaki <b>'✍️ GÜNCELLEME'</b> sütununa çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapmazsanız orijinal kodlar geçerli sayılır.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- DÜZENLEME SEMBOLÜNÜN HER HÜCREYE EKLENDİĞİ KISIM ---
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
                 column_config={
-                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn(
-                        "✍️ DÜZENLEME ALANI", 
-                        width="large",
-                        prefix="✍️ "  # <-- Bu satır her hücrenin başına sembolü koyar
-                    ),
+                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large"),
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True)
@@ -105,7 +102,7 @@ if bom_file and pkp_file:
                 st.balloons()
                 st.success("BOM Listesi Onaylandı!")
 
-            # --- 4. PKP OKUMA VE KIYASLAMA ---
+            # --- 5. PKP OKUMA VE KIYASLAMA ---
             raw_bytes = pkp_file.getvalue()
             try: content = raw_bytes.decode("utf-8")
             except: content = raw_bytes.decode("iso-8859-9")
@@ -133,7 +130,7 @@ if bom_file and pkp_file:
                 indicator='DURUM'
             )
 
-            # --- 5. SONUÇ METRİKLERİ VE TABLAR ---
+            # --- 6. SONUÇ METRİKLERİ VE TABLAR ---
             st.divider()
             c1, c2, c3 = st.columns(3)
             c1.metric("BOM (Toplam Parça)", len(df_bom_exploded))
@@ -152,7 +149,10 @@ if bom_file and pkp_file:
             # İndirme Butonu
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                edited_df.to_excel(writer, index=False)
+                # Veriyi indirirken hücre başındaki kalem sembolünü temizliyoruz
+                export_df = edited_df.copy()
+                export_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = export_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'].str.replace('✍️ ', '', regex=False)
+                export_df.to_excel(writer, index=False)
             st.download_button("📥 Onaylı Özdisan Listesini İndir (.xlsx)", output.getvalue(), "ozdisan_onayli_bom.xlsx", use_container_width=True)
 
         else:
