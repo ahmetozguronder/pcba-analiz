@@ -6,7 +6,7 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS: ÖZEL BAŞLIK VE GÖRSEL AYRIM ---
+# --- CSS: BAŞLIK VE AYIRICI SÜTUN VURGUSU ---
 st.markdown("""
     <style>
     /* Tablo genel başlık stili */
@@ -67,13 +67,12 @@ if bom_file and pkp_file:
             
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
             
-            # --- AYIRICI SÜTUN EKLEME ---
-            # Görsel boşluk yaratmak için boş bir sütun ekliyoruz
-            summary_df[' '] = "" 
+            # --- AYIRICI SÜTUN: MAVİ OK EKLEME ---
+            # İçerisinde mavi ok olan bir ayırıcı oluşturuyoruz
+            summary_df['AYIRICI'] = "🔵 ➡️" 
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
             
-            # Sütun Sıralaması: Boşluk sütunu ( ) Referanslar ve Düzenleme arasında
-            summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', ' ', 'DÜZENLEME ALANI']]
+            summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', 'AYIRICI', 'DÜZENLEME ALANI']]
 
             # --- 3. DÜZENLENEBİLİR TABLO ---
             st.subheader("🛠️ BOM Düzenleme Paneli")
@@ -84,7 +83,7 @@ if bom_file and pkp_file:
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True),
-                    " ": st.column_config.TextColumn(" ", disabled=True, width="small"), # Boşluk sütunu
+                    "AYIRICI": st.column_config.TextColumn("İşlem", disabled=True, width="small"), # Ok sütunu
                     "DÜZENLEME ALANI": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large")
                 },
                 hide_index=True
@@ -132,8 +131,8 @@ if bom_file and pkp_file:
             st.write("")
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Excel'e aktarırken boşluk sütununu temizliyoruz
-                final_export = edited_df.drop(columns=[' '])
+                # Excel'e aktarırken ok sütununu siliyoruz
+                final_export = edited_df.drop(columns=['AYIRICI'])
                 final_export.to_excel(writer, index=False)
             st.download_button("📥 Onaylı Özdisan Listesini İndir (.xlsx)", output.getvalue(), "ozdisan_onayli_bom.xlsx", use_container_width=True)
 
