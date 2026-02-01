@@ -6,6 +6,21 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
+# --- CSS İLE GÖRSEL DÜZENLEME (SÜTUN RENGİ) ---
+st.markdown("""
+    <style>
+    /* Düzenleme alanını ve tabloyu ferahlatmak için CSS */
+    [data-testid="stDataEditor"] div {
+        background-color: #ffffff !important;
+    }
+    /* Başlıkların daha belirgin olması için */
+    [data-testid="stDataEditor"] th {
+        background-color: #f0f2f6 !important;
+        color: #31333F !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- 1. MAVİ ÖZDİSAN BAŞLIĞI VE SAĞ ÜST NOT ---
 col_title, col_note = st.columns([2.5, 1])
 
@@ -52,24 +67,24 @@ if bom_file and pkp_file:
                 'DESIGNATOR': lambda x: ', '.join(x.unique())
             }).reset_index()
             
-            # Sütun isimlerini sabitleme
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
             
             # Müşterinin düzenleyeceği sütun
             summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df['BOM_KODU']
+            
+            # Sütunları istenen sıraya diz
             summary_df = summary_df[['✍️ GÜNCELLEME (KOD VEYA LİNK)', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
 
-            # Arka planı daha açık (Light Grey/Blue) panel
             st.markdown("""
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; margin-bottom: 10px;">
-                <h4 style="color: #495057; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
-                <p style="color: #6c757d; font-size: 14px;">
-                    Aşağıdaki <b>açık renkli</b> alana çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapılmayan satırlar orijinal haliyle kalacaktır.
+            <div style="background-color: #fdfefe; padding: 15px; border-radius: 8px; border: 1px solid #d1d5db; margin-bottom: 10px;">
+                <h4 style="color: #1f2937; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
+                <p style="color: #4b5563; font-size: 14px;">
+                    En soldaki <b>'✍️ DÜZENLEME ALANI'</b> artık daha açık renklidir. Çift tıklayarak Özdisan kodlarını girebilirsiniz.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-            # Tablo Düzenleyici
+            # Tabloyu açık renkli sütun konfigürasyonu ile gösteriyoruz
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
@@ -77,7 +92,7 @@ if bom_file and pkp_file:
                     "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn(
                         "✍️ DÜZENLEME ALANI", 
                         width="large",
-                        help="Özdisan stok kodunu veya linkini buraya yazın."
+                        help="Düzenlemek için hücreye çift tıklayın."
                     ),
                     "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
                     "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
@@ -118,7 +133,7 @@ if bom_file and pkp_file:
                 indicator='DURUM'
             )
 
-            # --- 5. SONUÇ METRİKLERİ VE TABLAR ---
+            # --- 5. SONUÇ METRİKLERİ ---
             st.divider()
             c1, c2, c3 = st.columns(3)
             c1.metric("BOM (Toplam Parça)", len(df_bom_exploded))
