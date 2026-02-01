@@ -23,13 +23,23 @@ with col_left:
 with col_right:
     pkp_file = st.file_uploader("2. PKP / Koordinat Dosyasını Seç (TXT)", type=['txt'])
 
+def explode_designators(df, col_name):
+    df_copy = df.copy()
+    df_copy[col_name] = df_copy[col_name].astype(str).str.split(r'[,;\s]+')
+    df_copy = df_copy.explode(col_name).reset_index(drop=True)
+    df_copy[col_name] = df_copy[col_name].str.strip()
+    df_copy = df_copy[df_copy[col_name] != ""]
+    return df_copy
+
 if bom_file and pkp_file:
     try:
+        # --- 1. BOM OKUMA ---
         df_bom_raw = pd.read_excel(bom_file)
         df_bom_raw.columns = [str(c).strip().upper() for c in df_bom_raw.columns]
         
+        # Sütun bulma hatası burada düzeltildi
         potential_code_cols = ['PART NUMBER', 'STOCK CODE', 'COMMENT', 'DESCRIPTION', 'ÜRÜN KODU', 'MALZEME KODU']
-        code_col = next((c for c in potential_code_cols if i, c in enumerate(df_bom_raw.columns) if c in potential_code_cols), df_bom_raw.columns[0])
+        code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[0])
 
         if 'DESIGNATOR' in df_bom_raw.columns:
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
@@ -41,57 +51,77 @@ if bom_file and pkp_file:
                 'DESIGNATOR': lambda x: ', '.join(x)
             }).reset_index()
             
-            # Müşteri Düzenleme Sütununu EN BAŞA alıyoruz (Dikkat çekmesi için)
-            summary_df['GÜNCELLEME (KOD VEYA LİNK)'] = summary_df[code_col]
-            cols = ['GÜNCELLEME (KOD VEYA LİNK)', code_col, 'ADET', 'REFERANSLAR']
-            summary_df = summary_df[cols]
+            # Müşteri Düzenleme Sütunu
+            summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df[code_col]
+            # Sütun sırasını düzenle
+            summary_df = summary_df[['✍️ GÜNCELLEME (KOD VEYA LİNK)', code_col, 'ADET', 'REFERANSLAR']]
 
-            # --- MÜŞTERİ YÖNLENDİRME KILAVUZU ---
+            # --- MÜŞTERİ YÖNLENDİRME ---
             st.markdown("""
-            <div style="background-color: #f0f7ff; padding: 20px; border-radius: 10px; border-left: 5px solid #0056b3;">
-                <h3 style="color: #0056b3; margin-top: 0;">👉 Nasıl Düzenlenir?</h3>
-                <ol>
-                    <li>Aşağıdaki tabloda en baştaki <b>'GÜNCELLEME'</b> sütununa farenizle <b>çift tıklayın</b>.</li>
-                    <li>Eksik kodları yazın veya Özdisan ürün linkini yapıştırın.</li>
-                    <li>Düzenleme bitince en alttaki <b>'Listeyi Onayla'</b> butonuna basın.</li>
-                </ol>
+            <div style="background-color: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1; margin-bottom: 20px;">
+                <h4 style="color: #31708f; margin-top: 0;">🛠️ Düzenleme Paneli Talimatı</h4>
+                <p style="color: #31708f; font-size: 15px;">
+                    Aşağıdaki tabloda en baştaki <b>mavi ikonlu sütuna</b> çift tıklayarak Özdisan kodlarını veya ürün linklerini girebilirsiniz. 
+                    Değişiklik yapmadığınız satırlar orijinal haliyle onaylanacaktır.
+                </p>
             </div>
             """, unsafe_allow_html=True)
-            st.write("")
 
             # --- ETKİLEŞİMLİ EDİTÖR ---
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
                 column_config={
-                    "GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn(
-                        "✍️ BURAYI DÜZENLEYİN",
-                        help="Hücreye çift tıklayarak Özdisan kodu veya linki giriniz.",
-                        width="large",
-                        required=True
+                    "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn(
+                        "✍️ DÜZENLENEBİLİR ALAN",
+                        help="Hücreye çift tıklayarak giriş yapın.",
+                        width="large"
                     ),
-                    "ADET": st.column_config.NumberColumn(disabled=True),
-                    code_col: st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
-                    "REFERANSLAR": st.column_config.TextColumn(disabled=True)
+                    code_col: st.column_config.TextColumn("ORİJİNAL KOD", disabled=True),
+                    "ADET": st.column_config.NumberColumn("ADET", disabled=True),
+                    "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True)
                 },
-                hide_index=True
+                hide_index=True,
+                key="bom_editor"
             )
 
-            if st.button("🚀 Listeyi Onayla ve Raporu Hazırla", type="primary", use_container_width=True):
+            if st.button("🚀 Listeyi Onayla ve Analizi Başlat", type="primary", use_container_width=True):
                 st.balloons()
-                st.success("Harika! Onaylanmış listeniz hazır.")
+                st.success("BOM Listesi Onaylandı!")
                 
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     edited_df.to_excel(writer, index=False)
-                st.download_button("📥 Onaylı Listeyi Excel Olarak İndir", output.getvalue(), "onayli_ozdisan_listesi.xlsx", use_container_width=True)
+                st.download_button("📥 Onaylı Listeyi İndir (.xlsx)", output.getvalue(), "onayli_ozdisan_listesi.xlsx", use_container_width=True)
 
-            # --- EŞLEŞME TABLARI ---
+            # --- ANALİZ BÖLÜMÜ ---
             st.divider()
-            # (PKP okuma ve analiz kısımları aynı kalıyor...)
-            # [Kodun kısalığı için buraya analiz mantığını tekrar eklemiyorum ama orijinalindeki gibi çalışacak]
+            raw_bytes = pkp_file.getvalue()
+            try: content = raw_bytes.decode("utf-8")
+            except: content = raw_bytes.decode("iso-8859-9")
+            
+            lines = content.splitlines()
+            h_idx = next((i for i, l in enumerate(lines) if "Designator" in l), None)
+            
+            pkp_list = []
+            if h_idx is not None:
+                for line in lines[h_idx + 1:]:
+                    parts = line.split()
+                    if parts:
+                        ref = parts[0].strip().upper()
+                        if len(ref) > 1 and "=" not in ref and "-" not in ref:
+                            pkp_list.append(ref)
+            
+            df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
+            df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
+            merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
+
+            t1, t2, t3 = st.tabs(["✅ Eşleşenler", "❌ BOM'da Eksik", "⚠️ PKP'de Fazla"])
+            with t1: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
+            with t2: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
+            with t3: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
 
         else:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
     except Exception as e:
-        st.error(f"Sistem Hatası: {e}")
+        st.error(f"Hata: {e}")
