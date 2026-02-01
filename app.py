@@ -34,7 +34,8 @@ def explode_designators(df, col_name):
     df_copy = df.copy()
     df_copy[col_name] = df_copy[col_name].astype(str).str.split(r'[,;\s]+')
     df_copy = df_copy.explode(col_name).reset_index(drop=True)
-    df_copy[col_name] = df_copy[col_name].str.strip().upper()
+    # Series nesneleri için .str.upper() kullanımı (Hata düzeltmesi)
+    df_copy[col_name] = df_copy[col_name].str.strip().str.upper()
     return df_copy[df_copy[col_name] != ""]
 
 if bom_file and pkp_file:
@@ -45,6 +46,7 @@ if bom_file and pkp_file:
         code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[0])
 
         if 'DESIGNATOR' in df_bom_raw.columns:
+            # Hazırlık aşamasında string dönüşümleri
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
             df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
@@ -54,12 +56,12 @@ if bom_file and pkp_file:
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
             summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', 'AYIRICI', 'DÜZENLEME ALANI']]
 
-            # --- TABLO BAŞLIĞI VE ÖZEL NOT ---
+            # --- TABLO BAŞLIĞI VE GÜNCELLENEN NOT ---
             col_head, col_note = st.columns([1.5, 2])
             with col_head:
                 st.subheader("🛠️ BOM Düzenleme Paneli")
             with col_note:
-                st.info("**💡 ÖNEMLİ NOT:** Hızlı teklif ve doğru eşleşme için lütfen **Özdisan Stok Kodları** ile çalışınız. Bu, analiz sürecini hızlandıracaktır.")
+                st.info("**💡 ÖNEMLİ NOT:** Hızlı teklif ve doğru eşleşme için lütfen **Özdisan Stok Kodları** ile çalışınız. Bu, **teklif sürecini** hızlandıracaktır.")
 
             if 'confirmed' not in st.session_state: st.session_state.confirmed = False
 
@@ -77,10 +79,11 @@ if bom_file and pkp_file:
                 hide_index=True
             )
 
-            # --- ANALİZ ÖN HAZIRLIK (HATA KONTROLÜ İÇİN) ---
-            pkp_content = pkp_file.getvalue().decode("utf-8", errors="ignore")
-            pkp_list = [l.split()[0].strip().upper() for l in pkp_content.splitlines() if "Designator" not in l and l.split()]
+            # --- ANALİZ VE GÜVENLİK KONTROLÜ ---
+            content = pkp_file.getvalue().decode("utf-8", errors="ignore")
+            pkp_list = [l.split()[0].strip().upper() for l in content.splitlines() if "Designator" not in l and l.split()]
             df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
+            
             df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
             merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
             
@@ -93,7 +96,7 @@ if bom_file and pkp_file:
             with col_btn1:
                 if st.button("✅ Listeyi Onayla", type="primary", use_container_width=True):
                     if len(missing_refs) > 0:
-                        st.error(f"⚠️ ONAYLANAMADI! BOM listesindeki şu referanslar PKP dosyasında yok: {', '.join(missing_refs)}")
+                        st.error(f"⚠️ ONAYLANAMADI! BOM listesindeki şu referanslar PKP dosyasında eksik: {', '.join(missing_refs)}")
                     else:
                         st.session_state.confirmed = True
                         st.rerun()
