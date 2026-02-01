@@ -6,9 +6,18 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- BAŞLIK BÖLÜMÜ (Hata burada düzeltildi) ---
-st.markdown("<h1 style='text-align: center; color: #E63946;'>ÖZDISAN PCBA ANALİZ MERKEZİ</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>BOM Listesi ve Altium PKP Dosyası Karşılaştırma Paneli</p>", unsafe_allow_html=True)
+# --- ÜST BÖLÜM (MAVİ TONLU BAŞLIK VE NOT) ---
+col_title, col_note = st.columns([2.5, 1])
+
+with col_title:
+    # Başlığı mavi tona çektik
+    st.markdown("<h1 style='color: #0056b3; margin-bottom: 0;'>ÖZDISAN PCBA ANALİZ MERKEZİ</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 18px; color: #555;'>BOM Listesi ve PKP Dosyası Karşılaştırma Paneli</p>", unsafe_allow_html=True)
+
+with col_note:
+    # Mavi bilgi kutusu (st.info varsayılan mavidir)
+    st.info("**💡 ÖNEMLİ NOT:**\n\nHızlı teklif süreci için lütfen listelerinizde **Özdisan Stok Kodlarını** belirtiniz.")
+
 st.divider()
 
 # Dosya Yükleme Alanları
@@ -21,12 +30,9 @@ with col_right:
 def explode_designators(df, col_name):
     """Hücre içindeki virgüllü yapıları ayırır ve her birini bir satır yapar."""
     df = df.copy()
-    # Virgül, noktalı virgül veya boşlukla ayrılmış referansları listeye çevir
     df[col_name] = df[col_name].astype(str).str.split(r'[,;\s]+')
-    # Listeyi satırlara patlat
     df = df.explode(col_name).reset_index(drop=True)
     df[col_name] = df[col_name].str.strip()
-    # Boş satırları filtrele
     df = df[df[col_name] != ""]
     return df
 
@@ -36,15 +42,11 @@ if bom_file and pkp_file:
         df_bom_raw = pd.read_excel(bom_file)
         df_bom_raw.columns = [str(c).strip().upper() for c in df_bom_raw.columns]
         
-        # Ürün kodu sütununu bulma
         potential_code_cols = ['PART NUMBER', 'STOCK CODE', 'COMMENT', 'DESCRIPTION', 'ÜRÜN KODU', 'MALZEME KODU']
         code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[0])
 
         if 'DESIGNATOR' in df_bom_raw.columns:
-            # Referansları büyük harf yap
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
-            
-            # Eşleşme için ayrıştırılmış liste
             df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
             
             # --- 2. PKP OKUMA ---
@@ -63,27 +65,24 @@ if bom_file and pkp_file:
                     parts = line.split()
                     if parts:
                         ref = parts[0].strip().upper()
-                        # Gereksiz çizgileri ve başlıkları ele
                         if len(ref) > 1 and "=" not in ref and "-" not in ref:
                             pkp_list.append(ref)
             
             df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
 
             # --- 3. ÖZET TABLO ---
-            # Her satırdaki referans sayısını hesapla
             df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # Ürün kodu bazlı gruplama
             summary_df = df_bom_raw.groupby(code_col).agg({
                 'ADET': 'sum',
                 'DESIGNATOR': lambda x: ', '.join(x)
             }).reset_index()
             summary_df.columns = ['MALZEME KODU / AÇIKLAMA', 'TOPLAM ADET', 'REFERANSLAR']
 
-            # Karşılaştırma
             merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
 
             # --- 4. GÖRSEL PANEL ---
+            # İstatistik kutularını da mavi temaya uygun hale getirdik
             m1, m2, m3 = st.columns(3)
             with m1:
                 st.metric("BOM Toplam Parça", int(summary_df['TOPLAM ADET'].sum()))
@@ -93,16 +92,16 @@ if bom_file and pkp_file:
                 fark = int(summary_df['TOPLAM ADET'].sum() - len(df_pkp))
                 st.metric("Eksik/Fazla", fark)
 
-            tabs = st.tabs(["📊 Özdisan Malzeme Listesi", "✅ Eşleşenler", "❌ Sadece BOM'da Var", "⚠️ Sadece PKP'de Var"])
+            tabs = st.tabs(["🔵 Özdisan Malzeme Listesi", "✅ Eşleşenler", "❌ Sadece BOM'da Var", "⚠️ Sadece PKP'de Var"])
 
             with tabs[0]:
-                st.subheader("Malzeme ve Referans Özet Tablosu")
+                st.info("Aşağıdaki liste BOM dosyanızdaki ürünleri referanslarıyla gruplandırır.")
                 st.dataframe(summary_df, use_container_width=True)
                 
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     summary_df.to_excel(writer, index=False)
-                st.download_button("📥 Özdisan Malzeme Listesini İndir (.xlsx)", output.getvalue(), "ozdisan_malzeme_ozet.xlsx")
+                st.download_button("📥 Mavi Etiketli Listeyi İndir (.xlsx)", output.getvalue(), "ozdisan_analiz_raporu.xlsx")
 
             with tabs[1]:
                 st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
@@ -116,4 +115,4 @@ if bom_file and pkp_file:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
 
     except Exception as e:
-        st.error(f"Bir hata oluştu: {e}")
+        st.error(f"Sistem Hatası: {e}")
