@@ -37,30 +37,36 @@ if bom_file and pkp_file:
         df_bom_raw = pd.read_excel(bom_file)
         df_bom_raw.columns = [str(c).strip().upper() for c in df_bom_raw.columns]
         
-        # Sütun tespiti
+        # Ürün Kodu Sütun Tespiti
         potential_code_cols = ['PART NUMBER', 'STOCK CODE', 'COMMENT', 'DESCRIPTION', 'ÜRÜN KODU', 'MALZEME KODU']
         code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[0])
 
         if 'DESIGNATOR' in df_bom_raw.columns:
-            # Adet ve Referans Temizliği
+            # Temizlik ve Adet Hesaplama
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
-            df_bom_raw['ADET'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
+            df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ ---
+            # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ (GÜNCEL GRUPLAMA) ---
+            # Gruplama yaparken sütunları netleştiriyoruz
             summary_df = df_bom_raw.groupby(code_col).agg({
-                'ADET': 'sum',
-                'DESIGNATOR': lambda x: ', '.join(x)
+                'ADET_SAYISI': 'sum',
+                'DESIGNATOR': lambda x: ', '.join(x.unique())
             }).reset_index()
             
+            # Sütun isimlerini HATA ALMAYACAK şekilde manuel set ediyoruz
+            summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
+            
             # Müşterinin düzenleyeceği sütun (Varsayılan olarak BOM kodu ile gelir)
-            summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df[code_col]
-            summary_df = summary_df[['✍️ GÜNCELLEME (KOD VEYA LİNK)', code_col, 'ADET', 'REFERANSLAR']]
+            summary_df['✍️ GÜNCELLEME (KOD VEYA LİNK)'] = summary_df['BOM_KODU']
+            
+            # Sütunları istenen sıraya diz
+            summary_df = summary_df[['✍️ GÜNCELLEME (KOD VEYA LİNK)', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
 
             st.markdown("""
             <div style="background-color: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1; margin-bottom: 10px;">
                 <h4 style="color: #31708f; margin-top: 0;">🛠️ Düzenleme Paneli</h4>
                 <p style="color: #31708f; font-size: 14px;">
-                    En soldaki <b>'GÜNCELLEME'</b> sütununa çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapmazsanız orijinal kodlar geçerli sayılır.
+                    En soldaki <b>'✍️ DÜZENLEME'</b> sütununa çift tıklayarak eksik kodları tamamlayabilirsiniz. Değişiklik yapmazsanız orijinal kodlar geçerli sayılır.
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -70,8 +76,8 @@ if bom_file and pkp_file:
                 use_container_width=True,
                 column_config={
                     "✍️ GÜNCELLEME (KOD VEYA LİNK)": st.column_config.TextColumn("✍️ DÜZENLEME ALANI", width="large"),
-                    code_col: st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
-                    "ADET": st.column_config.NumberColumn("ADET", disabled=True),
+                    "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
+                    "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
                     "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True)
                 },
                 hide_index=True
@@ -112,7 +118,7 @@ if bom_file and pkp_file:
             # --- 5. SONUÇ METRİKLERİ VE TABLAR ---
             st.divider()
             c1, c2, c3 = st.columns(3)
-            c1.metric("BOM (Ayrıştırılmış)", len(df_bom_exploded))
+            c1.metric("BOM (Toplam Parça)", len(df_bom_exploded))
             c2.metric("PKP (Altium)", len(df_pkp))
             c3.metric("Tam Eşleşen ✅", len(merged[merged['DURUM'] == 'both']))
 
@@ -135,4 +141,4 @@ if bom_file and pkp_file:
             st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
 
     except Exception as e:
-        st.error(f"Hata: {e}")
+        st.error(f"Sistem Hatası: {e}")
