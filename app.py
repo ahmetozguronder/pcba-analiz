@@ -22,10 +22,16 @@ if bom_file and pkp_file:
         if pkp_file.name.endswith('.xlsx'):
             df_pkp = pd.read_excel(pkp_file)
         else:
-            # TXT veya CSV okuma: Boşluklara (sep='\s+') göre ayırır
-            # Bu yöntem genelde P&P makinelerinin çıktısı için en iyisidir
-            content = pkp_file.getvalue().decode("utf-8")
-            df_pkp = pd.read_csv(io.StringIO(content), sep=None, engine='python')
+            try:
+                content = pkp_file.getvalue().decode("utf-8")
+            except UnicodeDecodeError:
+                content = pkp_file.getvalue().decode("iso-8859-9")
+            
+            # PKP dosyasındaki sütun ayırıcıyı (Sep) virgül, tab veya boşluk olarak dene
+            try:
+                df_pkp = pd.read_csv(io.StringIO(content), sep=None, engine='python')
+            except Exception as e:
+                st.error(f"Sütunlar ayrıştırılamadı: {e}")
 
         df_pkp.columns = [str(c).strip().upper() for c in df_pkp.columns]
 
@@ -65,3 +71,4 @@ if bom_file and pkp_file:
     except Exception as e:
         st.error(f"Dosya okuma hatası: {e}")
         st.info("İpucu: TXT dosyasının sütunları düzgün ayrılmamış olabilir.")
+
