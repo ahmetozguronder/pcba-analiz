@@ -6,19 +6,27 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS ---
+# --- CSS: BAŞLIK VE AYIRICI SÜTUN VURGUSU ---
 st.markdown("""
     <style>
-    [data-testid="stDataEditor"] th { font-weight: bold !important; }
-    [data-testid="stDataEditor"] th:last-child { background-color: #0056b3 !important; color: white !important; }
-    .table-spacer { margin-top: 30px; }
+    [data-testid="stDataEditor"] th {
+        font-weight: bold !important;
+    }
+    [data-testid="stDataEditor"] th:last-child {
+        background-color: #0056b3 !important;
+        color: white !important;
+    }
+    .table-spacer {
+        margin-top: 30px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- BAŞLIK ---
+# --- 1. BAŞLIK ---
 st.markdown("<h1 style='color: #0056b3; margin-bottom: 0;'>ÖZDISAN PCBA ANALİZ MERKEZİ</h1>", unsafe_allow_html=True)
 st.divider()
 
+# Dosya Yükleme
 bom_file = st.file_uploader("1. BOM Dosyasını Seç (Excel)", type=['xlsx'])
 pkp_file = st.file_uploader("2. PKP Dosyasını Seç (TXT)", type=['txt'])
 
@@ -37,7 +45,6 @@ if bom_file and pkp_file:
         code_col = next((c for c in potential_code_cols if c in df_bom_raw.columns), df_bom_raw.columns[0])
 
         if 'DESIGNATOR' in df_bom_raw.columns:
-            # Hazırlık
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
             df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
@@ -47,6 +54,7 @@ if bom_file and pkp_file:
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
             summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', 'AYIRICI', 'DÜZENLEME ALANI']]
 
+            # --- TABLO ---
             st.subheader("🛠️ BOM Düzenleme Paneli")
             if 'confirmed' not in st.session_state: st.session_state.confirmed = False
 
@@ -64,25 +72,32 @@ if bom_file and pkp_file:
                 hide_index=True
             )
 
-            # --- ANALİZ ÖN HAZIRLIK (Hata Kontrolü İçin) ---
-            content = pkp_file.getvalue().decode("utf-8", errors="ignore")
-            pkp_list = [l.split()[0].strip().upper() for l in content.splitlines() if "Designator" not in l and l.split()]
+            # --- ANALİZ ÖN HAZIRLIĞI (Hata Kontrolü İçin) ---
+            # PKP dosyasını oku ve listele
+            pkp_content = pkp_file.getvalue().decode("utf-8", errors="ignore")
+            pkp_list = [l.split()[0].strip().upper() for l in pkp_content.splitlines() if "Designator" not in l and l.split()]
             df_pkp = pd.DataFrame(pkp_list, columns=['DESIGNATOR'])
+            
+            # BOM listesini patlat
             df_bom_exploded = explode_designators(df_bom_raw, 'DESIGNATOR')
+            
+            # Karşılaştır
             merged = pd.merge(df_bom_exploded, df_pkp, on='DESIGNATOR', how='outer', indicator='DURUM')
             
-            # Eksik olanlar (BOM'da var ama PKP'de yok)
-            mismatch = merged[merged['DURUM'] == 'left_only']['DESIGNATOR'].unique()
+            # BOM'da olup PKP'de olmayanlar (Eksik Kalemler)
+            missing_in_pkp = merged[merged['DURUM'] == 'left_only']['DESIGNATOR'].unique()
 
-            # --- BUTONLAR VE HATA YÖNETİMİ ---
-            col_btn1, col_btn2 = st.columns([1, 4])
+            # --- BUTONLAR (YAN YANA) ---
+            col_btn1, col_btn2, col_msg = st.columns([1, 1, 3])
             
             with col_btn1:
                 if st.button("✅ Listeyi Onayla", type="primary", use_container_width=True):
-                    if len(mismatch) > 0:
-                        st.session_state.confirmed = False # Onayı engelle
-                        st.error(f"⚠️ ONAY VERİLEMEDİ! BOM listesindeki şu referanslar PKP dosyasında bulunamadı: {', '.join(mismatch)}")
+                    if len(missing_in_pkp) > 0:
+                        # HATA VARSA: Onaylama ve uyar
+                        st.session_state.confirmed = False
+                        st.error(f"⚠️ ONAY ENGELLENDİ! BOM'da bulunan şu referanslar PKP (dizgi) dosyasında eksik: {', '.join(missing_in_pkp)}")
                     else:
+                        # HATA YOKSA: Onayla
                         st.session_state.confirmed = True
                         st.rerun()
             
@@ -91,23 +106,38 @@ if bom_file and pkp_file:
                     output = io.BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         edited_df.drop(columns=['AYIRICI']).to_excel(writer, index=False)
-                    st.download_button("📥 Listeyi İndir", output.getvalue(), "ozdisan_onayli_bom.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=False)
+                    
+                    st.download_button(
+                        label="📥 Listeyi İndir",
+                        data=output.getvalue(),
+                        file_name="ozdisan_onayli_bom.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+            
+            with col_msg:
+                if st.session_state.confirmed:
+                    st.success("✔️ Liste başarıyla eşleşti ve onaylandı.")
 
-            # --- SONUÇLAR (SADECE HATA YOKSA VE ONAYLANDIYSA) ---
+            # --- ANALİZ SONUÇLARI (SADECE ONAY SONRASI) ---
             if st.session_state.confirmed:
                 st.markdown('<div class="table-spacer"></div>', unsafe_allow_html=True)
                 st.divider()
-                st.success("✔️ Tüm kalemler eşleşti, liste onaylandı.")
                 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("BOM Parça", len(df_bom_exploded))
-                m2.metric("PKP Parça", len(df_pkp))
+                m1.metric("BOM Parça Sayısı", len(df_bom_exploded))
+                m2.metric("PKP Parça Sayısı", len(df_pkp))
                 m3.metric("Tam Eşleşen ✅", len(merged[merged['DURUM'] == 'both']))
 
-                t1, t2, t3 = st.tabs(["✅ Eşleşenler", "❌ Sadece BOM", "⚠️ Sadece PKP"])
-                with t1: st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
-                with t2: st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
-                with t3: st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
+                t1, t2, t3 = st.tabs(["✅ Eşleşenler", "❌ Sadece BOM (Eksik)", "⚠️ Sadece PKP (Fazla)"])
+                with t1: 
+                    st.dataframe(merged[merged['DURUM'] == 'both'][['DESIGNATOR']], use_container_width=True)
+                with t2: 
+                    st.dataframe(merged[merged['DURUM'] == 'left_only'][['DESIGNATOR']], use_container_width=True)
+                with t3: 
+                    st.dataframe(merged[merged['DURUM'] == 'right_only'][['DESIGNATOR']], use_container_width=True)
 
-        else: st.error("DESIGNATOR sütunu bulunamadı!")
-    except Exception as e: st.error(f"Hata: {e}")
+        else: 
+            st.error("BOM dosyasında 'DESIGNATOR' sütunu bulunamadı!")
+    except Exception as e: 
+        st.error(f"Sistem Hatası: {e}")
