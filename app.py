@@ -6,16 +6,16 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS: SADECE İLK BAŞLIK RENGİNİ DEĞİŞTİRME ---
+# --- CSS: EN SAĞDAKİ BAŞLIK RENGİNİ DEĞİŞTİRME ---
 st.markdown("""
     <style>
     /* Tablo genel başlık stili */
     [data-testid="stDataEditor"] th {
         font-weight: bold !important;
     }
-    /* SADECE İLK SÜTUN BAŞLIĞI (DÜZENLEME ALANI) */
-    /* Mavi arka plan ve beyaz yazı yaparak dikkat çeker */
-    [data-testid="stDataEditor"] th:first-child {
+    /* SADECE EN SAĞDAKİ SÜTUN BAŞLIĞI (DÜZENLEME ALANI) */
+    /* last-child kullanarak en sağdaki başlığı mavi yapar */
+    [data-testid="stDataEditor"] th:last-child {
         background-color: #0056b3 !important;
         color: white !important;
     }
@@ -67,21 +67,23 @@ if bom_file and pkp_file:
             }).reset_index()
             
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
+            
+            # Düzenleme alanı sütunu oluştur ve EN SAĞA ekle
             summary_df['DÜZENLEME ALANI'] = summary_df['BOM_KODU']
-            summary_df = summary_df[['DÜZENLEME ALANI', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
+            summary_df = summary_df[['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR', 'DÜZENLEME ALANI']]
 
             # TABLO EDİTÖRÜ
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
                 column_config={
+                    "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
+                    "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
+                    "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True),
                     "DÜZENLEME ALANI": st.column_config.TextColumn(
                         "✍️ DÜZENLEME ALANI", 
                         width="large"
-                    ),
-                    "BOM_KODU": st.column_config.TextColumn("ORİJİNAL BOM KODU", disabled=True),
-                    "TOPLAM_ADET": st.column_config.NumberColumn("TOPLAM ADET", disabled=True),
-                    "REFERANSLAR": st.column_config.TextColumn("REFERANSLAR", disabled=True)
+                    )
                 },
                 hide_index=True
             )
