@@ -6,16 +6,23 @@ import re
 # Sayfa yapılandırması
 st.set_page_config(page_title="Özdisan PCBA Analiz", layout="wide", page_icon="⚡")
 
-# --- CSS: TABLO GÖRÜNÜMÜNÜ BEYAZLATMA ---
+# --- CSS: TABLO VE ÖZEL BAŞLIK RENKLENDİRME ---
 st.markdown("""
     <style>
+    /* Tablo genel arka planı beyaz */
     [data-testid="stDataEditor"] div {
         background-color: #ffffff !important;
     }
+    /* Tüm başlıkların genel stili */
     [data-testid="stDataEditor"] th {
         background-color: #f0f2f6 !important;
         color: #31333F !important;
         font-weight: bold !important;
+    }
+    /* Sadece ilk sütun başlığını (Düzenleme Alanı) Özdisan Mavisi yap */
+    [data-testid="stDataEditor"] th:first-child {
+        background-color: #0056b3 !important;
+        color: white !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -46,7 +53,6 @@ def explode_designators(df, col_name):
 
 if bom_file and pkp_file:
     try:
-        # --- 2. BOM OKUMA VE HAZIRLIK ---
         df_bom_raw = pd.read_excel(bom_file)
         df_bom_raw.columns = [str(c).strip().upper() for c in df_bom_raw.columns]
         
@@ -57,19 +63,16 @@ if bom_file and pkp_file:
             df_bom_raw['DESIGNATOR'] = df_bom_raw['DESIGNATOR'].astype(str).str.upper()
             df_bom_raw['ADET_SAYISI'] = df_bom_raw['DESIGNATOR'].apply(lambda x: len(re.split(r'[,;\s]+', x.strip())) if x.strip() else 0)
             
-            # --- 3. DÜZENLENEBİLİR MÜŞTERİ PANELİ ---
             summary_df = df_bom_raw.groupby(code_col).agg({
                 'ADET_SAYISI': 'sum',
                 'DESIGNATOR': lambda x: ', '.join(x.unique())
             }).reset_index()
             
             summary_df.columns = ['BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']
-            
-            # Düzenleme sütunu (Sembolsüz, temiz veri)
             summary_df['GÜNCELLEME'] = summary_df['BOM_KODU']
             summary_df = summary_df[['GÜNCELLEME', 'BOM_KODU', 'TOPLAM_ADET', 'REFERANSLAR']]
 
-            # TABLO EDİTÖRÜ (Bilgilendirme kutusu kaldırıldı)
+            # TABLO EDİTÖRÜ
             edited_df = st.data_editor(
                 summary_df,
                 use_container_width=True,
